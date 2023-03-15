@@ -130,3 +130,36 @@ def run_on_single_gpu(model, batch_list_t, batch_list_v, batch_sequence_output_l
         each_row = np.concatenate(tuple(each_row), axis=-1)
         sim_matrix.append(each_row)
     return sim_matrix
+
+class AllGather(torch.autograd.Function):
+    """An autograd function that performs allgather on a tensor."""
+
+    @staticmethod
+    def forward(ctx, tensor, args):
+        output = [torch.empty_like(tensor) for _ in range(args.world_size)]
+        torch.distributed.all_gather(output, tensor)
+        ctx.rank = args.rank
+        ctx.batch_size = tensor.shape[0]
+        return torch.cat(output, dim=0)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        return (
+            grad_output[ctx.batch_size * ctx.rank : ctx.batch_size * (ctx.rank + 1)],
+            None,
+        )
+        
+def show_log(configuration,logger, info):
+    if configuration is None or configuration.local_rank == 0:
+        logger.warning(info)
+
+def update_attr(target_name, target_config, target_attr_name, source_config, source_attr_name, default_value=None):
+    if hasattr(source_config, source_attr_name):
+        if default_value is None or getattr(source_config, source_attr_name) != default_value:
+            setattr(target_config, target_attr_name, getattr(source_config, source_attr_name))
+            show_log(source_config, "Set {}.{}: {}.".format(target_name,
+                                                            target_attr_name, getattr(target_config, target_attr_name)))
+    return target_config
+
+def check_attr(target_name, configuration):
+    return hasattr(configuration, target_name) and configuration.__dict__[target_name]

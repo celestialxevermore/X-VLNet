@@ -21,7 +21,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 import math
-from modules.module_clip import CLIP, convert_weights
+from modules.module_clip import CLIP
 from utils.pretrained_config import PretrainedConfig
 from modules.module_cross import CrossModel, CrossConfig, Transformer as TransformerClip
 logger = logging.getLogger(__name__)
@@ -177,39 +177,6 @@ class PreTrainedModel(nn.Module):
 
         return model
 
-##################################
-###### LOSS FUNCTION #############
-##################################
-class CrossEn(nn.Module):
-    def __init__(self,):
-        super(CrossEn, self).__init__()
-
-    def forward(self, sim_matrix):
-        logpt = F.log_softmax(sim_matrix, dim=-1)
-        logpt = torch.diag(logpt)
-        nce_loss = -logpt
-        sim_loss = nce_loss.mean()
-        return sim_loss
-
-
-class KL_Divergence(nn.Module):
-    def __init__(self,):
-        super(KL_Divergence,self).__init__()
-    def forward(self,sim_matrix):
-        t2v_logpt = F.log_softmax(sim_matrix,dim=-1)
-        v2t_logpt = F.log_softmax(sim_matrix.T,dim=-1)
-        t2v_logpt = -torch.diag(t2v_logpt)
-        v2t_logpt = -torch.diag(v2t_logpt)
-        
-        t2v_logpt /= t2v_logpt.sum()
-        v2t_logpt /= v2t_logpt.sum()
-        
-        t2v_loss = sum(t2v_logpt * torch.log(t2v_logpt/v2t_logpt))
-        v2t_loss = sum(v2t_logpt * torch.log(v2t_logpt/t2v_logpt))
-        return t2v_loss,v2t_loss
-
-
-
 class AllGather(torch.autograd.Function):
     """An autograd function that performs allgather on a tensor."""
 
@@ -263,29 +230,89 @@ class CLIP4ClipPreTrainedModel(PreTrainedModel, nn.Module):
 
         model = cls(cross_config, clip_state_dict, *inputs, **kwargs)
 
-        if model.sim_header == "seqLSTM" or model.sim_header == "seqTransf":
-            contain_frame_position = False
-            for key in state_dict.keys():
-                if key.find("frame_position_embeddings") > -1:
-                    contain_frame_position = True
-                    break
-            if contain_frame_position is False:
-                for key, val in clip_state_dict.items():
-                    if key == "positional_embedding":
-                        state_dict["frame_position_embeddings.weight"] = val.clone()
+        #if model.sim_header == "seqLSTM" or model.sim_header == "seqTransf":
+        contain_frame_position = False
+        for key in state_dict.keys():
+            if key.find("frame_position_embeddings") > -1:
+                contain_frame_position = True
+                break
+        if contain_frame_position is False:
+            for key, val in clip_state_dict.items():
+                if key == "positional_embedding":
+                    state_dict["frame_position_embeddings.weight"] = val.clone()
+                    continue
+                if key.find("transformer.resblocks") == 0:
+                    num_layer = int(key.split(".")[2])
+                    # cut from beginning
+                    if num_layer < task_config.cross_num_hidden_layers:
+                        state_dict[key.replace("transformer.", "transformerClip.")] = val.clone()
                         continue
-                    if model.sim_header == "seqTransf" and key.find("transformer.resblocks") == 0:
-                        num_layer = int(key.split(".")[2])
-                        # cut from beginning
-                        if num_layer < task_config.cross_num_hidden_layers:
-                            state_dict[key.replace("transformer.", "transformerClip.")] = val.clone()
-                            continue
         ## <=== End of initialization trick
 
         if state_dict is not None:
             model = cls.init_preweight(model, state_dict, task_config=task_config)
 
         return model
+
+class Setter():
+    def __init__(self,clip_state_dict):
+        self.clip_state_dict = clip_state_dict
+        self.clip_configuration = {}
+        self.vit = "visual.proj" in self.clip_state_dict
+        assert self.vit 
+    
+    def set_clip(self,configuration):
+        vision_width = self.clip_state_dict["visual.conv1.weight"].shape[0]
+        vision_layers = len(
+            [k for k in self.clip_state_dict.keys() if k.startswith("visual.") and k.endswith(".attn.in_proj_weight")])
+        vision_patch_size = self.clip_state_dict["visual.conv1.weight"].shape[-1]
+        grid_size = round((self.clip_state_dict["visual.positional_embedding"].shape[0] - 1) ** 0.5)
+        image_resolution = vision_patch_size * grid_size
+        embed_dim = self.clip_state_dict["text_projection"].shape[1]
+        context_length = self.clip_state_dict["positional_embedding"].shape[0]
+        vocab_size = self.clip_state_dict["token_embedding.weight"].shape[0]
+        transformer_width = self.clip_state_dict["ln_final.weight"].shape[0]
+        transformer_heads = transformer_width // 64
+        transformer_layers = len(set(k.split(".")[2] for k in self.clip_state_dict if k.startswith(f"transformer.resblocks")))
+
+        self.clip_configuration['vision_width'] = vision_width
+        self.clip_configuration['vision_layers'] = vision_layers
+        self.clip_configuration['vision_patch_size'] = vision_patch_size
+        self.clip_configuration['grid_size'] = grid_size
+        self.clip_configuration['image_resolution'] = image_resolution
+        self.clip_configuration['embed_dim'] = embed_dim
+        self.clip_configuration['context_length'] = context_length
+        self.clip_configuration['vocab_size'] = vocab_size
+        self.clip_configuration['transformer_width'] = transformer_width
+        self.clip_configuration['transformer_heads'] = transformer_heads
+        self.clip_configuration['transformer_layers'] = transformer_layers
+        
+        
+        show_log(configuration, "\t embed_dim: {}".format(embed_dim))
+        show_log(configuration, "\t image_resolution: {}".format(image_resolution))
+        show_log(configuration, "\t vision_layers: {}".format(vision_layers))
+        show_log(configuration, "\t vision_width: {}".format(vision_width))
+        show_log(configuration, "\t vision_patch_size: {}".format(vision_patch_size))
+        show_log(configuration, "\t context_length: {}".format(context_length))
+        show_log(configuration, "\t vocab_size: {}".format(vocab_size))
+        show_log(configuration, "\t transformer_width: {}".format(transformer_width))
+        show_log(configuration, "\t transformer_heads: {}".format(transformer_heads))
+        show_log(configuration, "\t transformer_layers: {}".format(transformer_layers))
+
+        return self.clip_configuration
+
+    def set_eyes(self,configuration,clip_configuration):
+        # for coarse-grained constrast weights
+        self.global_v2tmat_weight = nn.parameter.Parameter(torch.eye(clip_configuration['embed_dim']), requires_grad=True)
+        self.global_t2vmat_weight = nn.parameter.Parameter(torch.eye(clip_configuration['embed_dim']), requires_grad=True)
+        
+        self.local_mat_weight = nn.parameter.Parameter(torch.eye(clip_configuration['embed_dim']), requires_grad=True)
+        self.frame_mat_weight = nn.parameter.Parameter(torch.eye(configuration.max_frames), requires_grad=True)
+        self.word_mat_weight = nn.parameter.Parameter(torch.eye(configuration.max_words), requires_grad=True)
+        self.frame_mat_weight2 = nn.parameter.Parameter(torch.eye(configuration.max_frames), requires_grad=True)
+        self.word_mat_weight2 = nn.parameter.Parameter(torch.eye(configuration.max_words), requires_grad=True)
+
+    
 
 def show_log(task_config, info):
     if task_config is None or task_config.local_rank == 0:

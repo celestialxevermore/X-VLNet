@@ -3,22 +3,24 @@ import numpy as np
 import time 
 #from metrics import compute_metrics, tensor_text_to_video_metrics, tensor_video_to_text_sim
 from metrics import compute_metrics, tensor_text_to_video_metrics, tensor_video_to_text_sim
-from utilities import parallel_apply
-from scipy.special import softmax 
+from utilities import parallel_apply,run_on_single_gpu
+from scipy.special import softmax
+
 class Trainer():
     '''
         Trainer class
     '''
-    def __init__(self,model,optimizer,configuration,train_dataloader,scheduler,device,logger):
+    def __init__(self,model,optimizer,configuration,train_dataloader,scheduler,device,train_sampler,logger):
         super(Trainer,self).__init__(model,optimizer)
         self.train_dataloader = train_dataloader
         self.configuration=configuration
         self.scheduler = scheduler
         self.model = model
-        self.device = device 
+        self.device = device
+        self.train_sampler = train_sampler
         self.logger = logger
     
-    def _train(self,epoch,global_step):
+    def _train(self,epoch,global_step): #train_sampler
         
         torch.cuda.empty_cache()
         self.model.train()
@@ -67,10 +69,8 @@ class Trainer():
                                 (time.time() - start_time) / (log_step * self.configuration.gradient_accumulation_steps))
                     start_time = time.time()
 
-            total_loss = total_loss / len(self.train_dataloader)
         
-        
-        
+        total_loss = total_loss / len(self.train_dataloader)
         return total_loss,global_step
 
 

@@ -2,8 +2,10 @@ import os
 import torch 
 import numpy as np 
 import random
+from modules.file_utils import PYTORCH_PRETRAINED_BERT_CACHE
 from utilities import parallel_apply,get_logger
 from modules.optimization import BertAdam
+from modules.xvlnet import X_VLNet
 
 class Initializer():
     def __init__(self):
@@ -38,8 +40,8 @@ class Initializer():
 
         return configuration,logger
 
-    def init_device(self,configuration, local_rank):
-        global logger
+    def init_device(self,configuration,logger, local_rank):
+        
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu", local_rank)
 
@@ -62,7 +64,7 @@ class Initializer():
 
         # Prepare model
         cache_dir = configuration.cache_dir if configuration.cache_dir else os.path.join(str(PYTORCH_PRETRAINED_BERT_CACHE), 'distributed')
-        model = XVLNet.from_pretrained(configuration.cross_model, cache_dir=cache_dir, state_dict=model_state_dict, task_config=configuration)
+        model = X_VLNet.from_pretrained(cache_dir=cache_dir, state_dict=model_state_dict, task_config=configuration)
 
         model.to(device)
 
