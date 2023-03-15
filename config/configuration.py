@@ -3,9 +3,9 @@ import argparse
 from config.base_config import baseconfig
 
 
-class configuration(baseconfig):
+class Configuration(baseconfig):
     def __init__(self):
-        super().__init__()
+        super(Configuration,self).__init__()
         
     def parse_args(self):
         description = 'Text Video Retrieval Task'

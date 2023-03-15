@@ -16,6 +16,7 @@ class baseconfig(ABC):
         
         self.n_gpu = args.n_gpu
         self.n_display = 50 
+        self.cross_model = "cross-base"
         self.max_frames = 12
         self.max_words = 32 
         self.output_dir = args.output_dir
