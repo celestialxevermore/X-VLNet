@@ -1,4 +1,4 @@
-# X-VLNet for Text Video Retrieval : Bi-Directional Interaction with Fine-Grained Intra-Modality Alignment
+# X-MLNet for Text Video Retrieval : Enhancing multi-level cross-modal interaction with false negativeaware contrastive learning for text-video retrieval
 
 (**Februrary, 01, 2023) First version
 
