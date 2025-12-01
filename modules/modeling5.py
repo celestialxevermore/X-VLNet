@@ -447,95 +447,95 @@ class CLIP4Clip(CLIP4ClipPreTrainedModel):
         # '''
         # CrossCLR
         # '''
-        # ###Intra modality alignment
-        # logits_cluster_global_visual = video_output @ video_output.t() #자기 자신
-        # logits_cluster_global_sequence = sentence_output @ sentence_output.t() # 자기 자신
+        ###Intra modality alignment
+        logits_cluster_global_visual = video_output @ video_output.t() #자기 자신
+        logits_cluster_global_sequence = sentence_output @ sentence_output.t() # 자기 자신
         
-        # ###Inter modality alignment
-        # logits_per_visual =  torch.matmul(torch.matmul(video_output,self.global_v2tmat_weight),sentence_output.t())
-        # logits_per_sentence = torch.matmul(torch.matmul(sentence_output,self.global_t2vmat_weight),video_output.t())
+        ###Inter modality alignment
+        logits_per_visual =  torch.matmul(torch.matmul(video_output,self.global_v2tmat_weight),sentence_output.t())
+        logits_per_sentence = torch.matmul(torch.matmul(sentence_output,self.global_t2vmat_weight),video_output.t())
         
-        # sim_scores_visual = logits_cluster_global_visual
-        # sim_scores_sequence = logits_cluster_global_sequence
+        sim_scores_visual = logits_cluster_global_visual
+        sim_scores_sequence = logits_cluster_global_sequence
         
-        # '''
-        #     This is the module named fusing weight network module
-        # '''
+        '''
+            This is the module named fusing weight network module
+        '''
         
-        # # self.sequence_linear = torch.nn.Linear(sim_scores_sequence.shape[-1],1).cuda()
-        # # self.visual_linear = torch.nn.Linear(sim_scores_visual.shape[-1],1).cuda()
-        # # visual_ = self.visual_linear(sim_scores_visual).squeeze(-1)
-        # # sequence_ = self.sequence_linear(sim_scores_sequence).squeeze(-1)
-        # # sm_visual = torch.softmax(visual_,dim=-1)
-        # # sm_sequence = torch.softmax(sequence_,dim=-1)
-        
-        
-        
-        # '''
-        #     Newly added code! 2023.01.07
-        #     This is the module named self-softmax weighting module
-        # '''
-        # self_softmax_logits_visual = torch.softmax(sim_scores_visual,dim=-1)
-        # self_softmax_logits_sequence = torch.softmax(sim_scores_sequence,dim=-1)
-        # sim_scores_visual = self_softmax_logits_visual * sim_scores_visual
-        # sim_scores_sequence = self_softmax_logits_sequence * sim_scores_sequence
+        # self.sequence_linear = torch.nn.Linear(sim_scores_sequence.shape[-1],1).cuda()
+        # self.visual_linear = torch.nn.Linear(sim_scores_visual.shape[-1],1).cuda()
+        # visual_ = self.visual_linear(sim_scores_visual).squeeze(-1)
+        # sequence_ = self.sequence_linear(sim_scores_sequence).squeeze(-1)
+        # sm_visual = torch.softmax(visual_,dim=-1)
+        # sm_sequence = torch.softmax(sequence_,dim=-1)
         
         
         
-        # avg_sim_global_visual = torch.mean(sim_scores_visual,dim=1) #평균
-        # avg_sim_global_sequence = torch.mean(sim_scores_sequence,dim=1) #평균
+        '''
+            Newly added code! 2023.01.07
+            This is the module named self-softmax weighting module
+        '''
+        self_softmax_logits_visual = torch.softmax(sim_scores_visual,dim=-1)
+        self_softmax_logits_sequence = torch.softmax(sim_scores_sequence,dim=-1)
+        sim_scores_visual = self_softmax_logits_visual * sim_scores_visual
+        sim_scores_sequence = self_softmax_logits_sequence * sim_scores_sequence
         
-        # sorted_global_visual,indices_visual = torch.sort(avg_sim_global_visual) #정렬된 visual과 index batch x batch
-        # sorted_global_sequence,indices_sequence = torch.sort(avg_sim_global_sequence) #정렬된 text와 index batch x batch
-        # sorted_global_visual = sorted_global_visual / sorted_global_visual.max(dim=-1,keepdim=True)[0] # b x b
-        # sorted_global_sequence = sorted_global_sequence / sorted_global_sequence.max(dim=-1,keepdim=True)[0] # b x b
-        # ###
-        # # find index of influential samples and remove them from negative set 
-        # indices_visual_thrsh = indices_visual[sorted_global_visual<self.score_threshold+0.1]
-        # indices_sequence_thrsh = indices_sequence[sorted_global_sequence<self.score_threshold-0.1]
+        
+        
+        avg_sim_global_visual = torch.mean(sim_scores_visual,dim=1) #평균
+        avg_sim_global_sequence = torch.mean(sim_scores_sequence,dim=1) #평균
+        
+        sorted_global_visual,indices_visual = torch.sort(avg_sim_global_visual) #정렬된 visual과 index batch x batch
+        sorted_global_sequence,indices_sequence = torch.sort(avg_sim_global_sequence) #정렬된 text와 index batch x batch
+        sorted_global_visual = sorted_global_visual / sorted_global_visual.max(dim=-1,keepdim=True)[0] # b x b
+        sorted_global_sequence = sorted_global_sequence / sorted_global_sequence.max(dim=-1,keepdim=True)[0] # b x b
+        ###
+        # find index of influential samples and remove them from negative set 
+        indices_visual_thrsh = indices_visual[sorted_global_visual<self.score_threshold+0.1]
+        indices_sequence_thrsh = indices_sequence[sorted_global_sequence<self.score_threshold-0.1]
     
-        # labels = torch.arange(visual_output.shape[0]).to(device=visual_output.device)
+        labels = torch.arange(visual_output.shape[0]).to(device=visual_output.device)
         
-        # #true negative
-        # hard_negatives_in_global_visual = logits_cluster_global_visual[:,indices_visual_thrsh]
-        # hard_negatives_in_global_sequence = logits_cluster_global_sequence[:,indices_sequence_thrsh]
+        #true negative
+        hard_negatives_in_global_visual = logits_cluster_global_visual[:,indices_visual_thrsh]
+        hard_negatives_in_global_sequence = logits_cluster_global_sequence[:,indices_sequence_thrsh]
         
-        # visual_logits = logit_scale * torch.cat([logits_per_visual,self.negative_w * hard_negatives_in_global_visual],dim=1)
-        # sequence_logits = logit_scale * torch.cat([logits_per_sentence,self.negative_w*hard_negatives_in_global_sequence],dim=1)
+        visual_logits = logit_scale * torch.cat([logits_per_visual,self.negative_w * hard_negatives_in_global_visual],dim=1)
+        sequence_logits = logit_scale * torch.cat([logits_per_sentence,self.negative_w*hard_negatives_in_global_sequence],dim=1)
         
-        # loss_i2t = self.loss_fct(visual_logits)
-        # loss_t2i = self.loss_fct(sequence_logits)
-        # #일단 이걸 우선 하면 안되지.
+        loss_i2t = self.loss_fct(visual_logits)
+        loss_t2i = self.loss_fct(sequence_logits)
+        #일단 이걸 우선 하면 안되지.
 
         
         
-        # ### 기존 CrossCLR임 ###
-        # w_visual = ((avg_sim_global_visual/(sum(avg_sim_global_visual))))
-        # w_sequence = ((avg_sim_global_sequence/(sum(avg_sim_global_sequence))))        
+        ### 기존 CrossCLR임 ###
+        w_visual = ((avg_sim_global_visual/(sum(avg_sim_global_visual))))
+        w_sequence = ((avg_sim_global_sequence/(sum(avg_sim_global_sequence))))        
         
-        # '''
-        #     이거도 이거로 하면 안됨...? 그때 왜 안되었었지??
-        #     loss_i2t = loss_i2t * torch.exp(w_visual / self.temp_w).mean()
-        #     loss_t2i = loss_t2i * torch.exp(w_sequence / self.temp_w).mean()
-        # '''
-        # loss_i2t = loss_i2t * torch.exp(w_visual / self.temp_w)
-        # loss_t2i = loss_t2i * torch.exp(w_sequence / self.temp_w)
-        # loss_i2t = sum(loss_i2t) / (sum(torch.exp(w_visual / self.temp_w)))
-        # loss_t2i = sum(loss_t2i) / (sum(torch.exp(w_sequence / self.temp_w)))
+        '''
+            이거도 이거로 하면 안됨...? 그때 왜 안되었었지??
+            loss_i2t = loss_i2t * torch.exp(w_visual / self.temp_w).mean()
+            loss_t2i = loss_t2i * torch.exp(w_sequence / self.temp_w).mean()
+        '''
+        loss_i2t = loss_i2t * torch.exp(w_visual / self.temp_w)
+        loss_t2i = loss_t2i * torch.exp(w_sequence / self.temp_w)
+        loss_i2t = sum(loss_i2t) / (sum(torch.exp(w_visual / self.temp_w)))
+        loss_t2i = sum(loss_t2i) / (sum(torch.exp(w_sequence / self.temp_w)))
 
         
-        # #loss_i2t = loss_i2t * torch.exp(w_visual / self.temp_w).mean()
-        # #loss_t2i = loss_t2i * torch.exp(w_sequence / self.temp_w).mean()
+        #loss_i2t = loss_i2t * torch.exp(w_visual / self.temp_w).mean()
+        #loss_t2i = loss_t2i * torch.exp(w_sequence / self.temp_w).mean()
         
         
-        # # loss_i2t = loss_i2t * torch.exp(sm_visual / self.temp_w)
-        # # loss_t2i = loss_t2i * torch.exp(sm_sequence / self.temp_w)
-        # # loss_i2t = sum(loss_i2t) / (sum(torch.exp(sm_visual / self.temp_w)))
-        # # loss_t2i = sum(loss_t2i) / (sum(torch.exp(sm_sequence / self.temp_w)))
-        # #loss_i2t = loss_i2t * torch.exp(sm_visual / self.temp_w).mean()
-        # #loss_t2i = loss_t2i * torch.exp(sm_sequence / self.temp_w).mean()
+        # loss_i2t = loss_i2t * torch.exp(sm_visual / self.temp_w)
+        # loss_t2i = loss_t2i * torch.exp(sm_sequence / self.temp_w)
+        # loss_i2t = sum(loss_i2t) / (sum(torch.exp(sm_visual / self.temp_w)))
+        # loss_t2i = sum(loss_t2i) / (sum(torch.exp(sm_sequence / self.temp_w)))
+        #loss_i2t = loss_i2t * torch.exp(sm_visual / self.temp_w).mean()
+        #loss_t2i = loss_t2i * torch.exp(sm_sequence / self.temp_w).mean()
         
-        #global_video_sentence_loss = (loss_i2t + loss_t2i) / 2
+        global_video_sentence_loss = (loss_i2t + loss_t2i) / 2
         
         '''
         finegrained_transformer
