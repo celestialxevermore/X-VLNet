@@ -462,12 +462,12 @@ class CLIP4Clip(CLIP4ClipPreTrainedModel):
             This is the module named fusing weight network module
         '''
         
-        # self.sequence_linear = torch.nn.Linear(sim_scores_sequence.shape[-1],1).cuda()
-        # self.visual_linear = torch.nn.Linear(sim_scores_visual.shape[-1],1).cuda()
-        # visual_ = self.visual_linear(sim_scores_visual).squeeze(-1)
-        # sequence_ = self.sequence_linear(sim_scores_sequence).squeeze(-1)
-        # sm_visual = torch.softmax(visual_,dim=-1)
-        # sm_sequence = torch.softmax(sequence_,dim=-1)
+        self.sequence_linear = torch.nn.Linear(sim_scores_sequence.shape[-1],1).cuda()
+        self.visual_linear = torch.nn.Linear(sim_scores_visual.shape[-1],1).cuda()
+        visual_ = self.visual_linear(sim_scores_visual).squeeze(-1)
+        sequence_ = self.sequence_linear(sim_scores_sequence).squeeze(-1)
+        sm_visual = torch.softmax(visual_,dim=-1)
+        sm_sequence = torch.softmax(sequence_,dim=-1)
         
         
         
@@ -524,16 +524,16 @@ class CLIP4Clip(CLIP4ClipPreTrainedModel):
         loss_t2i = sum(loss_t2i) / (sum(torch.exp(w_sequence / self.temp_w)))
 
         
-        #loss_i2t = loss_i2t * torch.exp(w_visual / self.temp_w).mean()
-        #loss_t2i = loss_t2i * torch.exp(w_sequence / self.temp_w).mean()
+        loss_i2t = loss_i2t * torch.exp(w_visual / self.temp_w).mean()
+        loss_t2i = loss_t2i * torch.exp(w_sequence / self.temp_w).mean()
         
         
-        # loss_i2t = loss_i2t * torch.exp(sm_visual / self.temp_w)
-        # loss_t2i = loss_t2i * torch.exp(sm_sequence / self.temp_w)
-        # loss_i2t = sum(loss_i2t) / (sum(torch.exp(sm_visual / self.temp_w)))
-        # loss_t2i = sum(loss_t2i) / (sum(torch.exp(sm_sequence / self.temp_w)))
-        #loss_i2t = loss_i2t * torch.exp(sm_visual / self.temp_w).mean()
-        #loss_t2i = loss_t2i * torch.exp(sm_sequence / self.temp_w).mean()
+        loss_i2t = loss_i2t * torch.exp(sm_visual / self.temp_w)
+        loss_t2i = loss_t2i * torch.exp(sm_sequence / self.temp_w)
+        loss_i2t = sum(loss_i2t) / (sum(torch.exp(sm_visual / self.temp_w)))
+        loss_t2i = sum(loss_t2i) / (sum(torch.exp(sm_sequence / self.temp_w)))
+        loss_i2t = loss_i2t * torch.exp(sm_visual / self.temp_w).mean()
+        loss_t2i = loss_t2i * torch.exp(sm_sequence / self.temp_w).mean()
         
         global_video_sentence_loss = (loss_i2t + loss_t2i) / 2
         
