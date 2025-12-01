@@ -1,6 +1,6 @@
 # X-MLNet for Text Video Retrieval : Enhancing multi-level cross-modal interaction with false negativeaware contrastive learning for text-video retrieval
 
-(**Februrary, 01, 2023) First version
+(**October, 12, 2025) First version
 
 ## Requirement
 ```sh
